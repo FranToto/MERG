@@ -1,0 +1,197 @@
+---
+title: "Sat_Product_Viz"
+author: "Francois Thoral"
+date: "27 April 2020"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(readxl)
+library(raster)
+library(ncdf4)
+library(ggplot2)
+library(maps)
+library(maptools)
+library(RColorBrewer)
+library(sp) 
+library(rgdal)
+library(leaflet)
+library(measurements)
+library(tibbletime)
+library(tibble)
+library(lubridate)
+library(tidyverse)
+library(reshape2)
+library(plotly)
+library(leafem)
+library(dplyr)
+library(velox)
+library(stringr)
+```
+
+
+__AIM__ : To Visualize the satellite products (SST, KPAR) as well as the in situ sites in Lyttelton harbour.
+
+1. KPAR is estimated using satellite measurements (MODIS AQUA) of absorption and backscattering coefficients. Their spatial resolution is 500m-pixel wide.
+2. SST data come from MODIS AQUA with a nominal resolution of 1km but has been downscalled to 500m-pixel wide.
+3. The in situ sites refer to cross-shore transects where ecological monitoring of presence/absence and abundance of macroalgae has been conducted by the Cawthron institute and related to the dredging of the harbour.
+
+__Document Note__ : The maps, plots and app within this document are interactive so make sure you give them a play like zooming in and out in the maps but also on the plots. Clicking on the legend allows to only select and display the time series needed.
+
+# Table of contents
+
+1. [KPAR](#kpar)
+  * [Mean](#kpar_mean)
+  * [Availability of pixels](#kpar_availability)
+
+2. [SST](#sst)
+  * [Mean](#sst_mean)
+  * [Availability of pixels](#sst_availability)
+
+3. [Conclusion and further Work](#conclusion)
+
+# KPAR <a name="kpar"></a>
+
+The KPAR dataset consists of monthly means of the attenuation coefficient estimated using the absorption and backscattering coefficient using MODIS-AQUA measurements of the emergent flux, radiance leaving the water. The dataset runs from July 2002 to March 2019.
+
+## Mean <a name="kpar_mean"></a>
+
+
+```{r kpar_mean_map, fig.cap="Figure 1 -Mean KPAR product around Lyttelton harbour, NZ.", warning=F}
+## Read site sheet
+site <- read.csv(file=paste0(getwd(),'/Coords_sites.csv'))
+##
+
+## KPAR stack and mean
+kpar_mean <- raster('A200207_201903_KPAR_Mean_Lyttelton_QAA.tif')
+kpar <- stack('A200207_201903_KPAR_MO_Lyttelton_QAA.tif')
+##
+
+## Bathy of the zone NIWA grid
+## Download Bathy, plot it with sites and transform as contour
+bathy <- raster('Bathy_Lyttelton.tif')
+bathy[bathy>0] <- NA
+bathycontour <- rasterToContour(bathy)
+bathycontour <- spTransform(bathycontour,crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs84=0,0,0"))
+##
+
+## Plot KPAR mean and sites on leaflet map
+pal <- colorNumeric(rev(rainbow(10)), values(kpar_mean),
+                    na.color = "transparent")
+
+m <- leaflet(site) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
+  addTiles()  %>%# Print the map
+  addScaleBar(position = "bottomright",options = scaleBarOptions(imperial=F)) %>% 
+  addMouseCoordinates() %>%
+  addMarkers(site, lat = ~lat,lng = ~lon, popup = ~name) %>%
+  addRasterImage(kpar_mean,layerId = "Kd (/m)", col=pal, opacity = 0.8,project=T) %>%
+  addLegend(pal = pal, values = values(kpar_mean),title = "Kd (m-1)") %>%
+  addImageQuery(x=kpar_mean,layerId = "Kd (/m)",type='click',project=T,position='bottomleft') %>%
+  addPolylines(data=bathycontour,color = "black",opacity=0.2,popup = bathycontour$level)
+m
+```
+Key observations:
+
+  * Some high values for pixels close to shore. This over-estimation could be due to the 'land adjacency effect' which is due to the land being an near infra-red (NIR) bright target which create a NIR halo affecting the atmospheric correction (Matt explanation).
+  * To think about a method to take different pixes into account for the estimation of the KPAR value a the site. Maybe a compromise to find between the distance to the site and the availability of the pixel. Also possible to take more pixels into account.
+
+## Availability of pixels <a name="kpar_availability"></a>
+
+```{r kpar_availability_map, fig.cap="Figure 2 - Availability of pixels for the KPAR product around Lyttelton harbour, NZ.", warning=F}
+
+kpar_NA_sum <- raster('A200207_201903_KPAR_PixAvailability_Lyttelton.tif')
+
+kpar_NA_sum_proj <- projectRaster(kpar_NA_sum,crs=crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs84=0,0,0"),method='ngb')
+
+pal <- colorNumeric(rev(heat.colors(100)), values(kpar_NA_sum_proj),
+                    na.color = "transparent")
+
+m <- leaflet(site) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
+  addTiles()  %>%# Print the map
+  addScaleBar(position = "bottomright",options = scaleBarOptions(imperial=F)) %>% 
+  addMouseCoordinates() %>%
+  addMarkers(site, lat = ~lat,lng = ~lon, popup = ~name) %>%
+  addRasterImage(kpar_NA_sum_proj,layerId = "Number of pixels available", col=pal, opacity = 0.8) %>%
+  addLegend(pal = pal, values = values(kpar_NA_sum_proj),title = "Number of pixels available") %>%
+  addImageQuery(x=kpar_NA_sum_proj,layerId =  "Number of pixels available",type='click',position='bottomleft') %>%
+  addPolylines(data=bathycontour,color = "black",opacity=0.2,popup = bathycontour$level)
+m
+```
+Key observations:
+
+  * The "holes" offshore in the pixels are likely to be due because of the reprojection for leaflet. Nothing to worry about.
+  * Fewer pixels available close to shore/sites. As said previous section, to think about a method that takes into account the availability of pixels and distance to site.
+  
+# SST <a name="sst"></a>
+
+The SST dataset runs from July 2002 to March 2019 and consists of monthly means. I don't know from which satellite it is from but could retrieve that at the occasion.
+
+## Mean <a name="sst_mean"></a>
+
+```{r sst_mean_map, fig.cap="Figure 3 - Mean SST product around Lyttelton harbour, NZ.", warning=F}
+
+## SST stack and mean 
+sst <- stack('A200207_201903_SST_MO_Lyttelton.tif')
+sst_mean <- raster('A200207_201903_SST_Mean_Lyttelton.tif')
+##
+
+## Plot SST mean and sites on leaflet map
+pal <- colorNumeric(rev(rainbow(100)), values(sst_mean),
+                    na.color = "transparent")
+
+m <- leaflet(site) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
+  addTiles()  %>%# Print the map
+  addScaleBar(position = "bottomright",options = scaleBarOptions(imperial=F)) %>% 
+  addMouseCoordinates() %>%
+  addMarkers(site, lat = ~lat,lng = ~lon, popup = ~name) %>%
+  addRasterImage(sst_mean,layerId = "SST (degC)", col=pal, opacity = 0.8,project=T) %>%
+  addLegend(pal = pal, values = values(sst_mean),title = "SST (degC)") %>%
+  addImageQuery(x=sst_mean,layerId =  "SST (degC)",type='click',project=T,position='bottomleft') %>%
+  addPolylines(data=bathycontour,color = "black",opacity=0.2,popup = bathycontour$level)
+m
+```
+
+Key observations:
+
+  * Odd values in coastal pixels. Either too high? (in Lyttelton harbour and way out of bays) or too low? (within the bays).
+  * As previously, to think about a method to get the SST estimated value by satellite to the sites.
+
+## Availability of pixels <a name="sst_availability"></a>
+
+```{r sst_availability_map, fig.cap="Figure 4 - Availability of pixels for the SST product around Lyttelton harbour, NZ.", warning=F}
+sst_NA_sum <- raster('A200207_201903_SST_PixAvailability_Lyttelton.tif')
+
+pal <- colorNumeric(rev(heat.colors(100)), values(sst_NA_sum),
+                    na.color = "transparent")
+
+m <- leaflet(site) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
+  addTiles()  %>%# Print the map
+  addScaleBar(position = "bottomright",options = scaleBarOptions(imperial=F)) %>% 
+  addMouseCoordinates() %>%
+  addMarkers(site, lat = ~lat,lng = ~lon, popup = ~name) %>%
+  addRasterImage(sst_NA_sum,layerId = "Number of pixels available", col=pal, opacity = 0.8,project=T) %>%
+  addLegend(pal = pal, values = values(sst_NA_sum),title = "Number of pixels available") %>%
+  addImageQuery(x=sst_NA_sum,layerId =  "Number of pixels available",type='click',position='bottomleft',project=T) %>%
+  addPolylines(data=bathycontour,color = "black",opacity=0.2,popup = bathycontour$level)
+m
+```
+Key observations:
+
+  * Less pixels available where dodgy values are suspected.
+
+
+# Conclusion and further Work <a name="conclusion"></a>
+
+* Because the sat data is available from 07/2002 to 03/2019, to define a time frame to refine the dataset within. Use the surveys dates, maybe to focus on ecological data during the baseline period (19-20/01/17 BL1 to 5-8/12/17 BL3) and do another analysis with the data after dredging phase (DP1 only date to fell into sat data dataset range).
+* I could then regenerate monthly means within the new time frame and start exploring different scenarios for assigning a value to sites.
+
+Different scenarios:
+
+* 1 : Extract values (KPAR and SST) at site pixel -> Will be not realistic because of missing values due to shore and effect of land.
+* 2 : Extract values at closest pixel offshore above threshold of certain pixel availability.
+* 3 : Extract values from cluster of pixels at certain distance of site and above threshold of pixel availability.
+
+
+
