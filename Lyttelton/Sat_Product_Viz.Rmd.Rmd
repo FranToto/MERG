@@ -3,7 +3,7 @@ title: "Sat_Product_Viz"
 author: "Francois Thoral"
 date: "27 April 2020"
 output: html_document
-
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -49,8 +49,13 @@ __Document Note__ : The maps, plots and app within this document are interactive
 2. [SST](#sst)
   * [Mean](#sst_mean)
   * [Availability of pixels](#sst_availability)
+  * [Conclusion and further Work](#conclusion)
 
-3. [Conclusion and further Work](#conclusion)
+3. [Scenario 1](#scenario1)
+  * [KPAR](#s1_kpar)
+  * [SST](#s1_sst)
+  * [Conclusion and further Work](#conclusion_s1)
+
 
 # KPAR <a name="kpar"></a>
 
@@ -182,9 +187,9 @@ Key observations:
   * Less pixels available where dodgy values are suspected.
 
 
-# Conclusion and further Work <a name="conclusion"></a>
+## Conclusion and further Work <a name="conclusion"></a>
 
-* Because the sat data is available from 07/2002 to 03/2019, to define a time frame to refine the dataset within. Use the surveys dates, maybe to focus on ecological data during the baseline period (19-20/01/17 BL1 to 5-8/12/17 BL3) and do another analysis with the data after dredging phase (DP1 only date to fell into sat data dataset range).
+* Because the sat data is available from 07/2002 to 03/2019, to define a time frame to refine the dataset. Use the surveys dates, maybe to focus on ecological data during the baseline period (19-20/01/17 BL1 to 5-8/12/17 BL3) and do another analysis with the data after dredging phase (DP1 only date to fell into sat data dataset range).
 * I could then regenerate monthly means within the new time frame and start exploring different scenarios for assigning a value to sites.
 
 Different scenarios:
@@ -192,6 +197,91 @@ Different scenarios:
 * 1 : Extract values (KPAR and SST) at site pixel -> Will be not realistic because of missing values due to shore and effect of land.
 * 2 : Extract values at closest pixel offshore above threshold of certain pixel availability.
 * 3 : Extract values from cluster of pixels at certain distance of site and above threshold of pixel availability.
+
+
+# Scenario 1 <a name="scenario1"></a>
+
+In order to have estimates of KPAR and SST for each sites, we investigate here the scenario of extracting the time series of the pixel where the site is. This approach is supposed to fail as the sites are very coastal so prone to pixels unavailability due to cloud coverage as well as the land adjacency effect which leads to failure in the atmospheric correction process.
+
+## KPAR <a name="s1_kpar"></a>
+
+```{r s1_kpar, fig.cap="Figure 5 - Time series of KPAR (/m) at the 21 sites around Lyttelton harbour, NZ. The values are extracted from the pixels where the sites are (Scenario 1).", warning=F}
+
+## Work on Lat/Lon of site coordinates, reptroject to utm
+# Reprojection of sites lon/lat into tmerc (EBED crs)
+LatLong_site <- data.frame(Y=site$lat,X=site$lon)
+names(LatLong_site) <- c("Y","X")
+coordinates(LatLong_site) <- ~ X + Y # longitude first
+proj4string(LatLong_site) <- crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs84=0,0,0")
+utm_sites <- spTransform(LatLong_site, crs( "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"))
+##
+
+## KPAR
+kpar_velox <- velox('A200207_201903_KPAR_MO_Lyttelton_QAA.tif')
+kpar_sites <- kpar_velox$extract_points(utm_sites)
+kpar_sites_df <- data.frame(t(kpar_sites))
+
+colnames(kpar_sites_df) <- site$name
+rownames(kpar_sites_df) <- NULL
+dateseq <- seq.Date(as.Date("2002/7/1"), by = "month", length.out = dim(kpar_sites)[2])
+kpar_sites_df$Date <- dateseq
+
+kpar_sites_tb <- as_tibble(kpar_sites_df)
+kpar_sites_tb <- kpar_sites_tb %>% pivot_longer(-Date,names_to="Site",values_to='Kpar') %>% group_by(Date)
+
+q <- ggplot(kpar_sites_tb,aes(Date,Kpar,color=Site)) + geom_point() + geom_line() + labs(y="Kpar (/m)", x = "Date")
+ggplotly(q)
+```
+Relevant observations: 
+
+* No values for sites: PL14, PL03, PB10, PB11, PB03, PB02.
+* Very frequent gaps in time series.
+* Most of the values are over 0.2 /m and under 1 /m. Possible overestimation.
+
+```{r, warning=F}
+## KPAR mean, sd, median, min and max values over period
+summary_kpar <- kpar_sites_tb %>% group_by(Site) %>% summarise(Mean=mean(Kpar,na.rm=T),Sd=sd(Kpar,na.rm=T),Median=median(Kpar,na.rm=T),Min=min(Kpar,na.rm=T),Max=max(Kpar,na.rm=T))
+kable(summary_kpar)
+```
+
+## SST <a name="s1_sst"></a>
+
+```{r s1_sst, fig.cap="Figure 6 - Time series of SST (degC) at the 21 sites around Lyttelton harbour, NZ. The values are extracted from the pixels where the sites are (Scenario 1).", warning=F}
+sst_velox <- velox('A200207_201903_SST_MO_Lyttelton.tif')
+sst_sites <- sst_velox$extract_points(utm_sites)
+sst_sites_df <- data.frame(t(sst_sites))
+
+colnames(sst_sites_df) <- site$name
+rownames(sst_sites_df) <- NULL
+dateseq <- seq.Date(as.Date("2002/7/1"), by = "month", length.out = dim(sst_sites)[2])
+sst_sites_df$Date <- dateseq
+
+sst_sites_tb <- as_tibble(sst_sites_df)
+sst_sites_tb <- sst_sites_tb %>% pivot_longer(-Date,names_to="Site",values_to='SST') %>% group_by(Date)
+
+p <- ggplot(sst_sites_tb,aes(Date,SST,color=Site)) + geom_point() + geom_line() + labs(y="SST (degC)", x = "Date")
+ggplotly(p)
+```
+Relevant observations: 
+
+* No values for sites: PL03, PB11, PB10, PB03, PB02.
+* Very frequent gaps in time series. Some sites only have a few points (PL14), whereas others have only a few missing values (All BP for instance).
+* Most of the values are over 10 degC (Winter) and under 20 degC (Summer). Seems relatively good, however let's have a look at the mean for every stations and see how the gaps in time series will affect the mean.
+
+```{r, warning=F}
+## SST mean, sd, median, min and max values over period
+summary_sst <- sst_sites_tb %>% group_by(Site) %>% summarise(Mean=mean(SST,na.rm=T),Sd=sd(SST,na.rm=T),Median=median(SST,na.rm=T),Min=min(SST,na.rm=T),Max=max(SST,na.rm=T))
+kable(summary_sst)
+```
+
+## Conclusion and further Work <a name="conclusion_s1"></a>
+
+* The relative high number of missing values as well as the possible impact of the adjacent land lead to the conclusion that the scenario 1-way of getting estimated values for each site does not seem to show realistic values.
+* Let's carry on the exploration and analyse the other scenarios.
+
+
+
+
 
 
 
