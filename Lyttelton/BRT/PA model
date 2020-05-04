@@ -27,19 +27,6 @@ Mpyr$PA[Mpyr$AVCover==0]<-0
 
 head(Mpyr)
 
-
-x <- unlist(Mpyr$AVCover)
-h <- hist(x, breaks=10, col="red", xlab="AVCover",  main="Histogram with Normal Curve")
-
-# Deltalognormal
-
-x <- log(x[x!=0])
-h <- hist(x, breaks=10, col="red", xlab="log10(AVCover)",  main="Histogram with Normal Curve") 
-xfit<-seq(min(x),max(x),length=40) 
-yfit<-dnorm(xfit,mean=mean(x),sd=sd(x)) 
-yfit <- yfit*diff(h$mids[1:2])*length(x) 
-lines(xfit, yfit, col="blue", lwd=2)
-
 # Assess for correlation between predictors
 # one value per site
 reduced_env<-ddply(env,.(Site),summarize,
