@@ -56,7 +56,10 @@ __Document Note__ : The maps, plots and app within this document are interactive
   * [SST](#s1_sst)
   * [Conclusion and further Work](#conclusion_s1)
 
-
+4. [Scenario 2](#scenario2)
+  * [KPAR](#s2_kpar)
+  
+  
 # KPAR <a name="kpar"></a>
 
 The KPAR dataset consists of monthly means of the attenuation coefficient estimated using the absorption and backscattering coefficient using MODIS-AQUA measurements of the emergent flux, radiance leaving the water. The dataset runs from July 2002 to March 2019.
@@ -195,7 +198,8 @@ Key observations:
 Different scenarios:
 
 * 1 : Extract values (KPAR and SST) at site pixel -> Will be not realistic because of missing values due to shore and effect of land.
-* 2 : Extract values at closest pixel offshore above threshold of certain pixel availability.
+* 2 : Extract values at pixel wiht highest availability from cluster of 16 pixels adjacent to site location.
+* 2' : Extract values at closest pixel offshore above threshold of certain pixel availability.
 * 3 : Extract values from cluster of pixels at certain distance of site and above threshold of pixel availability.
 
 
@@ -280,8 +284,71 @@ kable(summary_sst)
 * Let's carry on the exploration and analyse the other scenarios.
 
 
+# Scenario 2 <a name="scenario2"></a>
 
+In order to have estimates of KPAR and SST for each sites, we investigate here the scenario of extracting the time series from a pixel with the maximum availability (using the pixel availability raster) within a cluster of 16 pixels adjacent to the site location (17 pixels including site, see what's the structure of the cluster).
 
+## KPAR <a name="s2_kpar"></a>
 
+```{r s2_kpar, fig.cap="Figure 7 - Time series of KPAR (/m) at the 21 sites around Lyttelton harbour, NZ. The values are extracted from the pixels with the highest availability in a cluster of 16 pixels adjacent to each sites. Scenario 2.", warning=F}
+## KPAR
+ngb_pix_maxPixAv_index_save <- c()
+sites_kpar_mean_save <- c()
+for (i in 1:dim(site)[1]) {
+  sites_tmerc <- data.frame(utm_sites)[i,]
+  sites_kpar_mean <- raster::extract(kpar_mean,sites_tmerc,cellnumbers=T) #Get cell number of pixel where site
+  ngb_pixels <- raster::adjacent(kpar_mean,cells=sites_kpar_mean[,1],pairs=F,directions=16,include=T)
+  
+  ngb_pix_maxPixAv_index <- ngb_pixels[which(kpar_NA_sum[ngb_pixels]==max(kpar_NA_sum[ngb_pixels]))] #Return index of pixel in cluster of 16 pixels around that have max pixel availability
+  # Issues with PB10 and PB3 -> Seems like no pixels available in vicinity
+  if (length(ngb_pix_maxPixAv_index)>1) { 
+    #Manually solve the issue affecting original index to pixel
+    ngb_pix_maxPixAv_index <- sites_kpar_mean[,1]
+  }
+  ngb_pix_maxPixAv_index_save <- c(ngb_pix_maxPixAv_index_save,ngb_pix_maxPixAv_index)
+}
+
+# Position of the "new" pixels where extractions of scenario 2 is from
+pix_index_maxPixAv <- xyFromCell(kpar_mean,cell=ngb_pix_maxPixAv_index_save,spatial=F)#Convert to sp feature, to use velox::
+Tmerc_site_s2 <- data.frame(Y=pix_index_maxPixAv[,2],X=pix_index_maxPixAv[,1])
+coordinates(Tmerc_site_s2) <- ~ X + Y # longitude first
+proj4string(Tmerc_site_s2) <- crs("+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+LatLong_sites_s2 <- spTransform(Tmerc_site_s2,crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs84=0,0,0"))
+LatLong_sites_s2$name <- paste0(site$name,"_s2")
+LatLong_sites_s2_df <- data.frame(LatLong_sites_s2)
+
+# Extract time series from "new" pixels
+pix_index_maxPixAv_sp <- xyFromCell(kpar_mean,cell=ngb_pix_maxPixAv_index_save,spatial=T)#Convert to sp feature, to use velox::
+kpar_sites_maxPixAv <- kpar_velox$extract_points(pix_index_maxPixAv_sp)#Classic extraction process
+kpar_sites_maxPixAv_df <- data.frame(t(kpar_sites_maxPixAv))
+
+colnames(kpar_sites_maxPixAv_df) <- LatLong_sites_s2$name#paste0(site$name[1],'_maxPixAv')
+rownames(kpar_sites_maxPixAv_df) <- NULL
+dateseq <- seq.Date(as.Date("2002/7/1"), by = "month", length.out = dim(kpar_sites_maxPixAv_df)[1])
+kpar_sites_maxPixAv_df$Date <- dateseq
+
+kpar_sites_maxPixAv_tb <- as_tibble(kpar_sites_maxPixAv_df)
+kpar_sites_maxPixAv_tb <- kpar_sites_maxPixAv_tb %>% pivot_longer(-Date,names_to="Site",values_to='Kpar') %>% group_by(Date)
+
+q <- ggplot(kpar_sites_maxPixAv_tb,aes(Date,Kpar,color=Site)) + geom_point() + geom_line() + labs(y="Kpar (/m)", x = "Date")
+ggplotly(q)
+```
+
+```{r s2_kpar_map, fig.cap="Figure 8 - Position of the Pixels where time series are extracted in the scenario 2 case.", warning=F}
+m <- leaflet(data=LatLong_sites_s2_df) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
+  addTiles()  %>%# Print the map
+  addMarkers(LatLong_sites_s2_df, lat = ~Y,lng = ~X, popup = ~name)
+m
+```
+
+Relevant observations: 
+
+* TO FILL (Less gap, Position of the new pixels, PB03 and PB10 no value coz no ngb)
+
+```{r, warning=F}
+## KPAR mean, sd, median, min and max values over period
+summary_kpar_s2 <- kpar_sites_maxPixAv_tb %>% group_by(Site) %>% summarise(Mean=mean(Kpar,na.rm=T),Sd=sd(Kpar,na.rm=T),Median=median(Kpar,na.rm=T),Min=min(Kpar,na.rm=T),Max=max(Kpar,na.rm=T))
+kable(summary_kpar_s2)
+```
 
 
