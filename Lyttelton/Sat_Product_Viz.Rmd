@@ -58,7 +58,11 @@ __Document Note__ : The maps, plots and app within this document are interactive
 
 4. [Scenario 2](#scenario2)
   * [KPAR](#s2_kpar)
-  
+  * [SST](#s2_sst)
+ 
+5. [Scenario 1 vs Scenario 2](#scenario1vs2)
+  * [KPAR](#s1vss2_kpar)
+  * [SST](#s1vss2_sst)
   
 # KPAR <a name="kpar"></a>
 
@@ -220,6 +224,13 @@ proj4string(LatLong_site) <- crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs
 utm_sites <- spTransform(LatLong_site, crs( "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"))
 ##
 
+## Extract values of pixel availability at sites location
+kpar_NA_sum_velox <- velox('A200207_201903_KPAR_PixAvailability_Lyttelton.tif')
+kpar_NA_sum_sites <- kpar_NA_sum_velox$extract_points(utm_sites)
+sst_NA_sum_velox <- velox('A200207_201903_SST_PixAvailability_Lyttelton.tif')
+sst_NA_sum_sites <- sst_NA_sum_velox$extract_points(utm_sites)
+##
+
 ## KPAR
 kpar_velox <- velox('A200207_201903_KPAR_MO_Lyttelton_QAA.tif')
 kpar_sites <- kpar_velox$extract_points(utm_sites)
@@ -245,6 +256,7 @@ Relevant observations:
 ```{r, warning=F}
 ## KPAR mean, sd, median, min and max values over period
 summary_kpar <- kpar_sites_tb %>% group_by(Site) %>% summarise(Mean=mean(Kpar,na.rm=T),Sd=sd(Kpar,na.rm=T),Median=median(Kpar,na.rm=T),Min=min(Kpar,na.rm=T),Max=max(Kpar,na.rm=T))
+summary_kpar$PixAv <- kpar_NA_sum_sites
 kable(summary_kpar)
 ```
 
@@ -275,6 +287,7 @@ Relevant observations:
 ```{r, warning=F}
 ## SST mean, sd, median, min and max values over period
 summary_sst <- sst_sites_tb %>% group_by(Site) %>% summarise(Mean=mean(SST,na.rm=T),Sd=sd(SST,na.rm=T),Median=median(SST,na.rm=T),Min=min(SST,na.rm=T),Max=max(SST,na.rm=T))
+summary_sst$PixAv <- sst_NA_sum_sites
 kable(summary_sst)
 ```
 
@@ -348,7 +361,113 @@ Relevant observations:
 ```{r, warning=F}
 ## KPAR mean, sd, median, min and max values over period
 summary_kpar_s2 <- kpar_sites_maxPixAv_tb %>% group_by(Site) %>% summarise(Mean=mean(Kpar,na.rm=T),Sd=sd(Kpar,na.rm=T),Median=median(Kpar,na.rm=T),Min=min(Kpar,na.rm=T),Max=max(Kpar,na.rm=T))
+summary_kpar_s2$PixAv <- kpar_NA_sum[ngb_pix_maxPixAv_index_save]
 kable(summary_kpar_s2)
 ```
+
+
+## SST <a name="s2_sst"></a>
+
+```{r s2_sst, fig.cap="Figure 9 - Time series of SST (degC) at the 21 sites around Lyttelton harbour, NZ. The values are extracted from the pixels with the highest availability in a cluster of 16 pixels adjacent to each sites. Scenario 2.", warning=F}
+## SST
+ngb_pix_maxPixAv_index_save <- c()
+sites_sst_mean_save <- c()
+for (i in 1:dim(site)[1]) {
+  sites_tmerc <- data.frame(utm_sites)[i,]
+  sites_sst_mean <- raster::extract(kpar_mean,sites_tmerc,cellnumbers=T) #Get cell number of pixel where site
+  ngb_pixels <- raster::adjacent(sst_mean,cells=sites_sst_mean[,1],pairs=F,directions=16,include=T)
+  
+  ngb_pix_maxPixAv_index <- ngb_pixels[which(sst_NA_sum[ngb_pixels]==max(sst_NA_sum[ngb_pixels]))] #Return index of pixel in cluster of 16 pixels around that have max pixel availability
+  # Issues with PB10 and PB3 -> Seems like no pixels available in vicinity
+  if (length(ngb_pix_maxPixAv_index)>1) { 
+    #Manually solve the issue affecting original index to pixel
+    ngb_pix_maxPixAv_index <- sites_sst_mean[,1]
+  }
+  ngb_pix_maxPixAv_index_save <- c(ngb_pix_maxPixAv_index_save,ngb_pix_maxPixAv_index)
+}
+
+# Position of the "new" pixels where extractions of scenario 2 is from
+pix_index_maxPixAv_sst <- xyFromCell(sst_mean,cell=ngb_pix_maxPixAv_index_save,spatial=F)#Convert to sp feature, to use velox::
+Tmerc_site_s2_sst <- data.frame(Y=pix_index_maxPixAv_sst[,2],X=pix_index_maxPixAv_sst[,1])
+coordinates(Tmerc_site_s2_sst) <- ~ X + Y # longitude first
+proj4string(Tmerc_site_s2_sst) <- crs("+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+LatLong_sites_s2_sst <- spTransform(Tmerc_site_s2_sst,crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +towgs84=0,0,0"))
+LatLong_sites_s2_sst$name <- paste0(site$name,"_s2")
+LatLong_sites_s2_sst_df <- data.frame(LatLong_sites_s2_sst)
+
+# Extract time series from "new" pixels
+pix_index_maxPixAv_sp <- xyFromCell(sst_mean,cell=ngb_pix_maxPixAv_index_save,spatial=T)#Convert to sp feature, to use velox::
+sst_sites_maxPixAv <- sst_velox$extract_points(pix_index_maxPixAv_sp)#Classic extraction process
+sst_sites_maxPixAv_df <- data.frame(t(sst_sites_maxPixAv))
+
+colnames(sst_sites_maxPixAv_df) <- LatLong_sites_s2_sst$name#paste0(site$name[1],'_maxPixAv')
+rownames(sst_sites_maxPixAv_df) <- NULL
+dateseq <- seq.Date(as.Date("2002/7/1"), by = "month", length.out = dim(sst_sites_maxPixAv_df)[1])
+sst_sites_maxPixAv_df$Date <- dateseq
+
+sst_sites_maxPixAv_tb <- as_tibble(sst_sites_maxPixAv_df)
+sst_sites_maxPixAv_tb <- sst_sites_maxPixAv_tb %>% pivot_longer(-Date,names_to="Site",values_to='SST') %>% group_by(Date)
+
+q <- ggplot(sst_sites_maxPixAv_tb,aes(Date,SST,color=Site)) + geom_point() + geom_line() + labs(y="SST (degC)", x = "Date")
+ggplotly(q)
+```
+
+```{r s2_sst_map, fig.cap="Figure 10 - Position of the pixels where time series of SST are extracted from in the scenario 2 case.", warning=F}
+m <- leaflet(data=LatLong_sites_s2_sst_df) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
+  addTiles()  %>%
+  addMarkers(LatLong_sites_s2_sst_df, lat = ~Y,lng = ~X, popup = ~name)
+m
+```
+
+Relevant observations: 
+
+* TO FILL (Less gap, Position of the new pixels, PB03 and PB10 no value coz no ngb, PL02 new pixel is in LH.)
+
+```{r, warning=F}
+## KPAR mean, sd, median, min and max values over period
+# SST mean, sd, median, min and max values over period
+summary_sst_s2 <- sst_sites_maxPixAv_tb %>% group_by(Site) %>% summarise(Mean=mean(SST,na.rm=T),Sd=sd(SST,na.rm=T),Median=median(SST,na.rm=T),Min=min(SST,na.rm=T),Max=max(SST,na.rm=T))
+summary_sst_s2$PixAv <- sst_NA_sum[ngb_pix_maxPixAv_index_save]
+kable(summary_sst_s2)
+```
+
+
+# Scenario 1 vs Scenario 2 <a name="scenario1vs2"></a>
+
+The following tables show the difference of the values from the scenario 1 minus scenario 2 for each sites. Negative values mean that the scenario 2 leads to an increase in the parameter/value from scenario 1.
+
+## KPAR <a name="s1vss2_kpar"></a>
+
+```{r, warning=F}
+## KPAR - Relative difference: s1 - s2
+is.na(summary_kpar) <- sapply(summary_kpar, is.infinite)#Replace INF value by NA
+is.na(summary_kpar_s2) <- sapply(summary_kpar_s2, is.infinite)#Replace INF value by NA
+rdiff_s1s2_kpar <- summary_kpar[,2:7] - summary_kpar_s2[,2:7]
+rdiff_s1s2_kpar$Site <- summary_kpar$Site
+kable(rdiff_s1s2_kpar)
+##
+```
+Key observations:
+
+  * Considerable gain of pixel availability, except for 6 sites.
+  * Not relevant methods for 6 sites where originally NA.
+  * Scenario 2 leads to decrease of KPAR mean.
+
+## SST <a name="s1vss2_sst"></a>
+
+```{r, warning=F}
+## SST - Relative difference: s1 - s2
+is.na(summary_sst) <- sapply(summary_sst, is.infinite)#Replace INF value by NA
+is.na(summary_sst_s2) <- sapply(summary_sst_s2, is.infinite)#Replace INF value by NA
+rdiff_s1s2_sst <- summary_sst[,2:7] - summary_sst_s2[,2:7]
+rdiff_s1s2_sst$Site <- summary_sst$Site
+kable(rdiff_s1s2_sst)
+```
+Key observations:
+
+  * Considerable gain of pixel availability, except for 5 sites.
+  * Not relevant methods for 5 sites where originally NA
+  * Scenario 2 leads to decrease of SST mean except at 4 sites (BP05, LH02, PL02, PL14).
+  * PB02 wtf, to check
 
 
