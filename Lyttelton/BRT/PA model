@@ -1,0 +1,167 @@
+#############################
+### Ch2- BRT- Presnce/Absence
+## Mareike Babuder
+# April 2020
+# after Elith & Leithwick 2014
+#############################
+NOT WORKING PROPERLY YET !!
+
+library(dismo)
+library(plyr)
+
+
+setwd("C:/Users/Mareike Babuder/Desktop/Phd/Chapter 2- Species distribution/SDM")
+
+
+survey<-read.csv("Ch2_main_survey.csv")
+env<- read.csv("Ch2_main_env.csv")
+head(survey)
+
+#subset into species trail M. pyrifera
+Mpyr<-subset(survey,survey$Species=="M. pyrifera")
+
+
+#adding PA column
+Mpyr$PA[Mpyr$AVCover>0]<-1 
+Mpyr$PA[Mpyr$AVCover==0]<-0
+
+head(Mpyr)
+
+# Assess for correlation between predictors
+# one value per site
+reduced_env<-ddply(env,.(Site),summarize,
+                        SST=mean(AVSST),
+                        KD=mean(AVKD),
+                        Fetch=mean(AVFetch))
+
+cor(reduced_env$SST,reduced_env$KD)
+cor.test(reduced_env$SST,reduced_env$KD)
+
+pairs(reduced_env[,2:4])
+cor(reduced_env[,2:4]) # correlation matrix
+cov(reduced_env[,2:4]) # covariance matrix
+reduced_env_raw<- reduced_env[,2:4]
+
+#merge survey and environmental dataset (all species!)
+main <- merge(Mpyr , reduced_env)
+
+
+# Performing cross-validation optimisation of a boosted regression tree model
+
+# Full model
+norm.param <- expand.grid(tc=1:6, lr=c(0.01 , 0.005 , 0.001 , 0.0005))
+deviance.mean.results <- matrix(NA,nrow=nrow(norm.param),ncol=1)
+
+# ALLYEAR data
+var.monotone.array <- t(c(-1,-1,+1))# transposes 
+colnames(var.monotone.array) <- colnames(reduced_env_raw)
+
+#dataset too small?!
+for (i in 1:nrow(norm.param) ) {
+  
+  model.example <- gbm.step(   data = main, # Data.frame
+                               gbm.x =  7:9, # Predictors 
+                               gbm.y = 6, # Response
+                               family = "bernoulli", 
+                               plot.main = FALSE,
+                               tree.complexity =  norm.param[i,1], 
+                               learning.rate =  norm.param[i,2], 
+                               bag.fraction = 0.5, 
+                               step.size = 50,
+                               var.monotone = var.monotone.array ,
+                               verbose=FALSE )
+  
+  if( class(model.example) == "gbm" ) { deviance.mean.results[i,1] <- model.example$cv.statistics$deviance.mean }
+  
+  if( class(model.example) != "gbm" ) { deviance.mean.results[i,1] <- 1 }
+  
+}
+
+
+summary(model.example)
+
+contribution <- summary(model.example)
+data.plot <- data.frame(names = contribution[,1], data = contribution[,2])
+data.plot <- data.plot[data.plot[,2] > 5,]
+
+# plot relative contribution
+par(mar=c(5,7,5,2)) # Clear space around Plot c(bottom, left, top, right)
+barplot(data.plot$data,names.arg= data.plot$names,horiz=TRUE,las=1, xlab="Relative contribution (%)")
+
+# plot thresholds
+m1<-gbm.plot(PA,variable.no=1,smooth=FALSE,show.contrib=TRUE, y.label="Marginal effect",plot.layout=c(1, 1))
+m2<-gbm.plot(PA,variable.no=2,smooth=FALSE,show.contrib=TRUE, y.label="Marginal effect",plot.layout=c(1, 1))
+m3<-gbm.plot(PA,variable.no=3,smooth=FALSE,show.contrib=TRUE, y.label="Marginal effect",plot.layout=c(1, 1))
+
+gbm.plot(PA,n.plots=3,write.title=F)
+gbm.plot.fits(PA) #Values above each graph indicate the weighted mean of fitted values in relation to each non-factor predictor
+
+
+# Predict with same data to extract the fit
+
+fited.for.pa <- predict(PA,main[,-1],n.trees=PA$gbm.call$best.trees,type="response")
+cor(fited.for.pa,main[,1])
+plot(fited.for.pa,main[,1])
+
+
+# pairwise interactions
+
+find.int<- gbm.interactions(PA)
+find.int$interactions
+find.int$rank.list
+gbm.perspec(PA,3,1, y.range=c(1,1000),z.range=c(0,0.8))
+
+PA$self.statistics$correlation
+
+# Predict with same data to extract the fit
+
+fited.for.pa <- predict(PA,main[,-4],n.trees=PA$gbm.call$best.trees,type="response")
+cor(fited.for.pa,main[,4])
+plot(fited.for.pa,main[,4])
+
+# function to calculate deviance given two vectors of observed and predicted values
+# calc.deviance(obs, pred, weights = rep(1,length(obs)),  family="binomial", calc.mean = TRUE)
+
+calc.deviance(main[,4], fited.for.pa, family="binomial", calc.mean = TRUE)
+1-calc.deviance(main[,4], fited.for.pa, family="binomial", calc.mean = TRUE)
+
+
+#Spatial predictions?
+
+
+
+######################multiplot function
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
