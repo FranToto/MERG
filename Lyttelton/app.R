@@ -19,10 +19,21 @@ library(tidyverse)
 
 ## Loading and tidying Data
 kpar_sites <- read.csv(file=paste0(getwd(),'/KparSites_S2.csv'))
-kpar_sites_tb <- as_tibble(kpar_sites) %>% mutate(Date=as.Date(Date)) %>% filter(grepl('LH', Site) | grepl('BP', Site))
+kpar_sites_s3_8 <- read.csv(file=paste0(getwd(),'/Kpar_Sites_S3_Median_8pix.csv')) #S3 Median
+kpar_sites_s3_16 <- read.csv(file=paste0(getwd(),'/Kpar_Sites_S3_Median_16pix.csv')) #S3 Median
+
+kpar_sites_tb <- as_tibble(kpar_sites) %>% mutate(Date=as.Date(Date)) #%>% filter(grepl('LH', Site) | grepl('BP', Site))
+kpar_sites_s3_8_tb <- as_tibble(kpar_sites_s3_8) %>% mutate(Date=as.Date(Date))#, SiteFrom = as.character(SiteFrom)) #S3 Median
+kpar_sites_s3_16_tb <- as_tibble(kpar_sites_s3_16) %>% mutate(Date=as.Date(Date))#, SiteFrom = as.character(SiteFrom)) #S3 Median
+
 
 sst_sites <- read.csv(file=paste0(getwd(),'/SST_Sites_S2.csv'))
-sst_sites_tb <- as_tibble(sst_sites) %>% mutate(Date=as.Date(Date)) %>% filter(grepl('LH', Site) | grepl('BP', Site))
+sst_sites_s3_8 <- read.csv(file=paste0(getwd(),'/SST_Sites_S3_Median_8pix.csv'))
+sst_sites_s3_16 <- read.csv(file=paste0(getwd(),'/SST_Sites_S3_Median_16pix.csv'))
+
+sst_sites_tb <- as_tibble(sst_sites) %>% mutate(Date=as.Date(Date)) #%>% filter(grepl('LH', Site) | grepl('BP', Site))
+sst_sites_s3_8_tb <- as_tibble(sst_sites_s3_8) %>% mutate(Date=as.Date(Date))#, SiteFrom = as.character(SiteFrom))# %>% filter(grepl('LH', Site) | grepl('BP', Site))
+sst_sites_s3_16_tb <- as_tibble(sst_sites_s3_16) %>% mutate(Date=as.Date(Date))#, SiteFrom = as.character(SiteFrom))# %>% filter(grepl('LH', Site) | grepl('BP', Site))
 
 #Function to reset slider input date to start of the month to fit with kpar_sites$Date
 monthStart <- function(x) {
@@ -46,8 +57,12 @@ ui <- fluidPage(
         # Show a plot of the generated distribution
         mainPanel(
             tabsetPanel(
-                tabPanel("Kd",plotlyOutput("tsPlot"),tableOutput("summary")),
-                tabPanel("SST",plotlyOutput("tsPlot_sst"),tableOutput("summary_sst"))
+                tabPanel("Kd_S2",plotlyOutput("tsPlot"),tableOutput("summary")),
+                tabPanel("Kd_S3_8pix",plotlyOutput("tsPlot_S3_8"),tableOutput("summary_S3_8")),
+                tabPanel("Kd_S3_16pix",plotlyOutput("tsPlot_S3_16"),tableOutput("summary_S3_16")),
+                tabPanel("SST_S2",plotlyOutput("tsPlot_sst"),tableOutput("summary_sst")),
+                tabPanel("SST_S3_8pix",plotlyOutput("tsPlot_sst_S3_8"),tableOutput("summary_sst_S3_8")),
+                tabPanel("SST_S3_16pix",plotlyOutput("tsPlot_sst_S3_16"),tableOutput("summary_sst_S3_16"))
             )
         )
     )
@@ -61,7 +76,7 @@ server <- function(input, output) {
         })
     
     output$tsPlot <- renderPlotly({
-        q <- ggplot(kpar_ts_reac(),aes(Date,Kpar,color=Site)) + geom_point() + geom_line() + labs(y="Kpar (/m)", x = "Date")
+        q <- ggplot(kpar_ts_reac(),aes(Date,Kpar,color=Site)) + geom_point() + geom_line() + labs(y="Kpar (/m)", x = "Date") #S2 closest most available pixel
         ggplotly(q)
     })
     
@@ -69,8 +84,38 @@ server <- function(input, output) {
         summary_kpar <- kpar_ts_reac() %>% group_by(Site) %>% summarise(Mean=mean(Kpar,na.rm=T),Sd=sd(Kpar,na.rm=T),Median=median(Kpar,na.rm=T),Min=min(Kpar,na.rm=T),Max=max(Kpar,na.rm=T),Npix=sum(!is.na(Kpar)))
         summary_kpar
     })
-
     
+    
+    kpar_ts_s3_8_reac <- reactive({
+        kpar_sites_s3_8_tb %>% filter(Date>=monthStart(input$dateRangeinput[1]) & Date<=monthStart(input$dateRangeinput[2]))
+    })
+    
+    output$tsPlot_S3_8 <- renderPlotly({
+        q <- ggplot(kpar_ts_s3_8_reac(),aes(Date,Median,color=SiteFrom)) + geom_point() + geom_line() + labs(y="Kpar (/m)", x = "Date") #S3 Median
+        ggplotly(q)
+    })
+    
+    output$summary_S3_8 <- renderTable({
+        summary_kpar <- kpar_ts_s3_8_reac() %>% group_by(SiteFrom) %>% summarise(Mean=mean(Median,na.rm=T),Sd=sd(Median,na.rm=T),M_edian=median(Median,na.rm=T),Min=min(Median,na.rm=T),Max=max(Median,na.rm=T),Npix=sum(!is.na(Median)))
+        summary_kpar
+    })
+    
+    
+    kpar_ts_s3_16_reac <- reactive({
+        kpar_sites_s3_16_tb %>% filter(Date>=monthStart(input$dateRangeinput[1]) & Date<=monthStart(input$dateRangeinput[2]))
+    })
+    
+    output$tsPlot_S3_16 <- renderPlotly({
+        q <- ggplot(kpar_ts_s3_16_reac(),aes(Date,Median,color=SiteFrom)) + geom_point() + geom_line() + labs(y="Kpar (/m)", x = "Date") #S3 Median
+        ggplotly(q)
+    })
+
+    output$summary_S3_16 <- renderTable({
+        summary_kpar <- kpar_ts_s3_16_reac() %>% group_by(SiteFrom) %>% summarise(Mean=mean(Median,na.rm=T),Sd=sd(Median,na.rm=T),M_edian=median(Median,na.rm=T),Min=min(Median,na.rm=T),Max=max(Median,na.rm=T),Npix=sum(!is.na(Median)))
+        summary_kpar
+    })
+    
+### SST ###
     sst_ts_reac <- reactive({
         sst_sites_tb %>% filter(Date>=monthStart(input$dateRangeinput[1]) & Date<=monthStart(input$dateRangeinput[2]))
     })
@@ -84,6 +129,35 @@ server <- function(input, output) {
         summarysst <- sst_ts_reac() %>% group_by(Site) %>% summarise(Mean=mean(SST,na.rm=T),Sd=sd(SST,na.rm=T),Median=median(SST,na.rm=T),Min=min(SST,na.rm=T),Max=max(SST,na.rm=T),Npix=sum(!is.na(SST)))
         summarysst
     })
+    
+    sst_ts_S3_8_reac <- reactive({
+        sst_sites_s3_8_tb %>% filter(Date>=monthStart(input$dateRangeinput[1]) & Date<=monthStart(input$dateRangeinput[2]))
+    })
+    
+    output$tsPlot_sst_S3_8 <- renderPlotly({
+        q <- ggplot(sst_ts_S3_8_reac(),aes(Date,Median,color=SiteFrom)) + geom_point() + geom_line() + labs(y="SST (degC)", x = "Date")
+        ggplotly(q)
+    })
+    
+    output$summary_sst_S3_8 <- renderTable({
+        summarysst <- sst_ts_S3_8_reac() %>% group_by(SiteFrom) %>% summarise(Mean=mean(Median,na.rm=T),Sd=sd(Median,na.rm=T),M_edian=median(Median,na.rm=T),Min=min(Median,na.rm=T),Max=max(Median,na.rm=T),Npix=sum(!is.na(Median)))
+        summarysst
+    })
+    
+    sst_ts_S3_16_reac <- reactive({
+        sst_sites_s3_16_tb %>% filter(Date>=monthStart(input$dateRangeinput[1]) & Date<=monthStart(input$dateRangeinput[2]))
+    })
+    
+    output$tsPlot_sst_S3_16 <- renderPlotly({
+        q <- ggplot(sst_ts_S3_16_reac(),aes(Date,Median,color=SiteFrom)) + geom_point() + geom_line() + labs(y="SST (degC)", x = "Date")
+        ggplotly(q)
+    })
+    
+    output$summary_sst_S3_16 <- renderTable({
+        summarysst <- sst_ts_S3_16_reac() %>% group_by(SiteFrom) %>% summarise(Mean=mean(Median,na.rm=T),Sd=sd(Median,na.rm=T),M_edian=median(Median,na.rm=T),Min=min(Median,na.rm=T),Max=max(Median,na.rm=T),Npix=sum(!is.na(Median)))
+        summarysst
+    })
+    
     
 }
 
