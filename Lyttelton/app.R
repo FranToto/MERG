@@ -35,6 +35,11 @@ sst_sites_tb <- as_tibble(sst_sites) %>% mutate(Date=as.Date(Date)) #%>% filter(
 sst_sites_s3_8_tb <- as_tibble(sst_sites_s3_8) %>% mutate(Date=as.Date(Date))#, SiteFrom = as.character(SiteFrom))# %>% filter(grepl('LH', Site) | grepl('BP', Site))
 sst_sites_s3_16_tb <- as_tibble(sst_sites_s3_16) %>% mutate(Date=as.Date(Date))#, SiteFrom = as.character(SiteFrom))# %>% filter(grepl('LH', Site) | grepl('BP', Site))
 
+par_sites <- read.csv(file=paste0(getwd(),'/PAR_4km_Sites.csv'))
+par_sites_tb <- as_tibble(par_sites) %>% mutate(Date=as.Date(Date)) 
+
+
+
 #Function to reset slider input date to start of the month to fit with kpar_sites$Date
 monthStart <- function(x) {
     x <- as.POSIXlt(x)
@@ -62,7 +67,8 @@ ui <- fluidPage(
                 tabPanel("Kd_S3_16pix",plotlyOutput("tsPlot_S3_16"),tableOutput("summary_S3_16")),
                 tabPanel("SST_S2",plotlyOutput("tsPlot_sst"),tableOutput("summary_sst")),
                 tabPanel("SST_S3_8pix",plotlyOutput("tsPlot_sst_S3_8"),tableOutput("summary_sst_S3_8")),
-                tabPanel("SST_S3_16pix",plotlyOutput("tsPlot_sst_S3_16"),tableOutput("summary_sst_S3_16"))
+                tabPanel("SST_S3_16pix",plotlyOutput("tsPlot_sst_S3_16"),tableOutput("summary_sst_S3_16")),
+                tabPanel("PAR_MO_4km",plotlyOutput("tsPlot_PAR"),tableOutput("summary_PAR"))
             )
         )
     )
@@ -157,6 +163,22 @@ server <- function(input, output) {
         summarysst <- sst_ts_S3_16_reac() %>% group_by(SiteFrom) %>% summarise(Mean=mean(Median,na.rm=T),Sd=sd(Median,na.rm=T),M_edian=median(Median,na.rm=T),Min=min(Median,na.rm=T),Max=max(Median,na.rm=T),Npix=sum(!is.na(Median)))
         summarysst
     })
+    
+### PAR ###
+    par_ts_reac <- reactive({
+        par_sites_tb %>% filter(Date>=monthStart(input$dateRangeinput[1]) & Date<=monthStart(input$dateRangeinput[2]))
+    })
+    
+    output$tsPlot_PAR <- renderPlotly({
+        q <- ggplot(par_ts_reac(),aes(Date,PAR,color=Site)) + geom_point() + geom_line() + labs(y="PAR (Einstein m-2 d-1)", x = "Date") 
+        ggplotly(q)
+    })
+    
+    output$summary_PAR <- renderTable({
+        summary_par <- par_ts_reac() %>% group_by(Site) %>% summarise(Mean=mean(PAR,na.rm=T),Sd=sd(PAR,na.rm=T),Median=median(PAR,na.rm=T),Min=min(PAR,na.rm=T),Max=max(PAR,na.rm=T),Npix=sum(!is.na(PAR)))
+        summary_par
+    })
+    
     
     
 }
