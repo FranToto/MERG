@@ -152,7 +152,7 @@ ggplotly(q)
 
 ## Calculate Daily Mean
 # kpar_ngb_median_sites_tb <- read_csv('KPAR_Daily_Sites_S3_Median_16pix.csv')
-kpar_daily_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Day = as.Date(Date)) %>% group_by(SiteFrom,Day) %>% summarise(Kpar_day=mean(Median,na.rm=T))
+kpar_daily_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Day = as.Date(Date)) %>% group_by(SiteFrom,Day) %>% summarise(Kpar_day=mean(Median,na.rm=T)) 
 
 q <-  ggplot(kpar_daily_s3_tidy,aes(x=Day,y=Kpar_day,color=SiteFrom)) + geom_point() + geom_line()
 ggplotly(q)
@@ -160,21 +160,26 @@ ggplotly(q)
 
 ## Calculate Monthly Mean
 #kpar_monthly_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Month = paste0(month(as.Date(Date),label=T),year(as.Date(Date)))) %>% group_by(SiteFrom,Month) %>% summarise(Kpar_month=mean(Median,na.rm=T))
-kpar_monthly_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Month = format(as.Date(Date), "%Y-%m")) %>% group_by(SiteFrom,Month) %>% summarise(Kpar_month=mean(Median,na.rm=T))
+kpar_monthly_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Month = format(as.Date(Date), "%Y-%m")) %>% group_by(SiteFrom,Month) %>% summarise(Kpar_month=mean(Median,na.rm=T))  %>% ungroup()
 
-q <-  ggplot(kpar_monthly_s3_tidy,aes(x=Month,y=Kpar_month,color=SiteFrom)) + geom_point() + geom_line()
+q <-  ggplot(kpar_monthly_s3_tidy,aes(x=Month,y=Kpar_month,group=SiteFrom,color=SiteFrom)) + geom_point() + geom_line()
 ggplotly(q)
 ##
 
 ## Calculate Weekly Mean
 #kpar_weekly_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Weeks = week(Date))%>% group_by(SiteFrom,Weeks) %>% summarise(Kpar_weeks=mean(Median,na.rm=T))
-kpar_weekly_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Weeks = format(as.Date(Date), "%Y-%W")) %>% group_by(SiteFrom,Weeks) %>% summarise(Kpar_weeks=mean(Median,na.rm=T))
+kpar_weekly_s3_tidy <- kpar_ngb_median_sites_tb %>% mutate(Weeks = format(as.Date(Date), "%Y-%W")) %>% group_by(SiteFrom,Weeks) %>% summarise(Kpar_weeks=mean(Median,na.rm=T)) %>% ungroup()
 
-q <-  ggplot(kpar_weekly_s3_tidy,aes(x=Weeks,y=Kpar_weeks,color=SiteFrom)) + geom_point() + geom_line()
+q <-  ggplot(kpar_weekly_s3_tidy,aes(x=Weeks,y=Kpar_weeks,group=SiteFrom,color=SiteFrom)) + geom_point() + geom_line()
 ggplotly(q)
 ##
 
+## Calculate Number of values per months
+kpar_s3_pixAv <- kpar_ngb_median_sites_tb %>% mutate(Month = format(as.Date(Date), "%Y-%m")) %>% group_by(SiteFrom,Month) %>% summarise(non_na_count = sum(!is.na(Median))) %>% ungroup()
 
+q <-  ggplot(kpar_s3_pixAv,aes(x=Month,y=non_na_count,group=SiteFrom,color=SiteFrom)) + geom_point() + geom_line()
+ggplotly(q)
+##
 
 #####
 
