@@ -3,7 +3,7 @@ title: "Sat_Product_Viz"
 author: "Francois Thoral"
 date: "27 April 2020"
 output: html_document
-runtime: shiny
+#runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -98,9 +98,9 @@ m <- leaflet(site) %>% setView(lng = 173, lat = -43.55, zoom = 10) %>%
   addScaleBar(position = "bottomright",options = scaleBarOptions(imperial=F)) %>% 
   addMouseCoordinates() %>%
   addMarkers(site, lat = ~lat,lng = ~lon, popup = ~name) %>%
-  addRasterImage(kpar_mean,layerId = "Kd (/m)", col=pal, opacity = 0.8,project=T) %>%
+  addRasterImage(kpar_mean,layerId = "Kd", col=pal, opacity = 0.8,project=T) %>%
   addLegend(pal = pal, values = values(kpar_mean),title = "Kd (m-1)") %>%
-  addImageQuery(x=kpar_mean,layerId = "Kd (/m)",type='click',project=T,position='bottomleft') %>%
+  addImageQuery(x=kpar_mean,layerId = "Kd",type='click',project=T,position='bottomleft') %>%
   addPolylines(data=bathycontour,color = "black",opacity=0.2,popup = bathycontour$level)
 m
 ```
